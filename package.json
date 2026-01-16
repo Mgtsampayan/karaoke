@@ -1,0 +1,20 @@
+{
+  "name": "karaoke-lyrics",
+  "version": "1.0.0",
+  "description": "🎤 Karaoke Lyrics Player - Play YouTube songs with synchronized lyrics",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx serve . -l 3000",
+    "open": "npx serve . -l 3000 --open"
+  },
+  "keywords": [
+    "karaoke",
+    "lyrics",
+    "youtube",
+    "music",
+    "lrclib"
+  ],
+  "author": "",
+  "license": "MIT"
+}
