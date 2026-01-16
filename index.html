@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎤 Lyrics Finder - YouTube Song Analyzer</title>
+    <meta name="description" content="Analyze YouTube music videos and display their lyrics in a beautiful karaoke-style format">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="background-effects">
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="gradient-orb orb-3"></div>
+    </div>
+
+    <div class="container">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">🎵</span>
+                <h1>Lyrics<span class="highlight">Finder</span></h1>
+            </div>
+            <p class="tagline">Paste a YouTube URL and discover the lyrics instantly</p>
+        </header>
+
+        <!-- Input Section -->
+        <section class="input-section">
+            <div class="input-wrapper">
+                <div class="input-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
+                        <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
+                    </svg>
+                </div>
+                <input 
+                    type="text" 
+                    id="youtube-url" 
+                    class="url-input" 
+                    placeholder="Paste YouTube URL here... (e.g., https://youtube.com/watch?v=...)"
+                    autocomplete="off"
+                >
+                <button id="analyze-btn" class="analyze-btn">
+                    <span class="btn-text">Analyze</span>
+                    <span class="btn-icon">🔍</span>
+                </button>
+            </div>
+            
+            <!-- Manual Override (if YouTube title doesn't work) -->
+            <div class="manual-search" id="manual-search">
+                <p class="manual-hint">Or search manually:</p>
+                <div class="manual-inputs">
+                    <input type="text" id="artist-input" class="manual-input" placeholder="Artist name">
+                    <input type="text" id="song-input" class="manual-input" placeholder="Song title">
+                    <button id="manual-search-btn" class="manual-btn">Find Lyrics</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <section class="loading-section" id="loading-section">
+            <div class="loading-spinner">
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <p class="loading-text">Analyzing your song...</p>
+        </section>
+
+        <!-- Error State -->
+        <section class="error-section" id="error-section">
+            <div class="error-icon">😔</div>
+            <h3 class="error-title">Oops! Something went wrong</h3>
+            <p class="error-message" id="error-message"></p>
+            <button class="retry-btn" id="retry-btn">Try Again</button>
+        </section>
+
+        <!-- Song Info & Lyrics Display -->
+        <section class="lyrics-section" id="lyrics-section">
+            <div class="song-info">
+                <div class="song-thumbnail" id="song-thumbnail"></div>
+                <div class="song-details">
+                    <h2 class="song-title" id="song-title"></h2>
+                    <p class="song-artist" id="song-artist"></p>
+                </div>
+            </div>
+
+            <div class="lyrics-container">
+                <div class="lyrics-header">
+                    <h3>🎤 Lyrics</h3>
+                    <div class="lyrics-actions">
+                        <button class="action-btn" id="font-increase" title="Increase font size">A+</button>
+                        <button class="action-btn" id="font-decrease" title="Decrease font size">A-</button>
+                        <button class="action-btn" id="copy-lyrics" title="Copy lyrics">📋</button>
+                    </div>
+                </div>
+                <div class="lyrics-display" id="lyrics-display">
+                    <!-- Lyrics will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Made with ❤️ for music lovers | Powered by Lyrics.ovh API</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
