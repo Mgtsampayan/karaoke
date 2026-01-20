@@ -1,882 +1,418 @@
-/**
- * 🎤 Karaoke Lyrics - YouTube Song Player
- * Plays YouTube videos with synchronized lyrics
- * 
- * APIs Used:
- * 1. YouTube IFrame API - For video playback
- * 2. LRCLIB - Free FOSS lyrics database with synced lyrics (https://lrclib.net)
- * 3. Lyrics.ovh - Backup for plain lyrics
- */
-
 // ============================================
-// DOM Elements
+// AUDIO SYNC ENGINE
 // ============================================
-const elements = {
-    youtubeUrl: document.getElementById('youtube-url'),
-    analyzeBtn: document.getElementById('analyze-btn'),
-    artistInput: document.getElementById('artist-input'),
-    songInput: document.getElementById('song-input'),
-    manualSearchBtn: document.getElementById('manual-search-btn'),
-    loadingSection: document.getElementById('loading-section'),
-    errorSection: document.getElementById('error-section'),
-    errorMessage: document.getElementById('error-message'),
-    retryBtn: document.getElementById('retry-btn'),
-    karaokeSection: document.getElementById('karaoke-section'),
-    songThumbnail: document.getElementById('song-thumbnail'),
-    songTitle: document.getElementById('song-title'),
-    songArtist: document.getElementById('song-artist'),
-    syncBadge: document.getElementById('sync-badge'),
-    lyricsDisplay: document.getElementById('lyrics-display'),
-    fontIncrease: document.getElementById('font-increase'),
-    fontDecrease: document.getElementById('font-decrease'),
-    copyLyrics: document.getElementById('copy-lyrics'),
-    autoScrollBtn: document.getElementById('auto-scroll-btn'),
-    playPauseBtn: document.getElementById('play-pause-btn'),
-    playIcon: document.getElementById('play-icon'),
-    progressBar: document.getElementById('progress-bar'),
-    progressFill: document.getElementById('progress-fill'),
-    timeDisplay: document.getElementById('time-display'),
-    syncModeBtn: document.getElementById('sync-mode-btn')
-};
-
-// ============================================
-// State
-// ============================================
-let currentFontSize = 1.4; // rem
-let currentLyrics = '';
-let syncedLyrics = []; // Array of {time: seconds, text: string}
-let hasSyncedLyrics = false;
-let autoScrollEnabled = true;
-let currentVideoId = null;
-let player = null;
-let progressInterval = null;
-let currentLineIndex = -1;
-
-// ============================================
-// API Configuration
-// ============================================
-const API = {
-    youtubeOembed: 'https://www.youtube.com/oembed',
-    lrclib: 'https://lrclib.net/api',
-    lyricsOvh: 'https://api.lyrics.ovh/v1'
-};
-
-// ============================================
-// YouTube Player Setup
-// ============================================
-
-// Called by YouTube IFrame API when ready
-function onYouTubeIframeAPIReady() {
-    console.log('🎬 YouTube IFrame API Ready');
-}
-
-/**
- * Initialize YouTube player with video ID
- */
-function initYouTubePlayer(videoId) {
-    currentVideoId = videoId;
-
-    // Destroy existing player if any
-    if (player) {
-        player.destroy();
-        player = null;
+class AudioSyncEngine {
+    constructor() {
+        this.audioContext = null;
+        this.startTime = 0;
+        this.pausedTime = 0;
+        this.driftCorrection = 0;
     }
 
-    // Create new player
-    player = new YT.Player('youtube-player', {
-        height: '100%',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-            'playsinline': 1,
-            'autoplay': 1,
-            'controls': 0, // Hide YouTube controls, use our own
-            'modestbranding': 1,
-            'rel': 0,
-            'showinfo': 0
-        },
-        events: {
-            'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange,
-            'onError': onPlayerError
-        }
-    });
-}
-
-function onPlayerReady(event) {
-    console.log('🎵 Player ready');
-    event.target.playVideo();
-    startProgressTracking();
-}
-
-function onPlayerStateChange(event) {
-    const state = event.data;
-
-    if (state === YT.PlayerState.PLAYING) {
-        elements.playIcon.textContent = '⏸️';
-        startProgressTracking();
-    } else if (state === YT.PlayerState.PAUSED) {
-        elements.playIcon.textContent = '▶️';
-        stopProgressTracking();
-    } else if (state === YT.PlayerState.ENDED) {
-        elements.playIcon.textContent = '🔄';
-        stopProgressTracking();
-        resetLyricsHighlight();
-    }
-}
-
-function onPlayerError(event) {
-    console.error('YouTube Player Error:', event.data);
-    showToast('Video playback error. Try a different video.', 3000);
-}
-
-/**
- * Toggle play/pause
- */
-function togglePlayPause() {
-    if (!player) return;
-
-    const state = player.getPlayerState();
-    if (state === YT.PlayerState.PLAYING) {
-        player.pauseVideo();
-    } else {
-        player.playVideo();
-    }
-}
-
-/**
- * Start tracking progress for sync
- */
-function startProgressTracking() {
-    stopProgressTracking();
-    progressInterval = setInterval(updateProgress, 100); // Update every 100ms for smooth sync
-}
-
-function stopProgressTracking() {
-    if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-    }
-}
-
-/**
- * Update progress bar and sync lyrics
- */
-function updateProgress() {
-    if (!player || typeof player.getCurrentTime !== 'function') return;
-
-    const currentTime = player.getCurrentTime();
-    const duration = player.getDuration();
-
-    // Update progress bar
-    const progress = (currentTime / duration) * 100;
-    elements.progressFill.style.width = `${progress}%`;
-
-    // Update time display
-    elements.timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
-
-    // Sync lyrics if available
-    if (hasSyncedLyrics) {
-        syncLyricsToTime(currentTime);
-    }
-}
-
-/**
- * Format seconds to MM:SS
- */
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-/**
- * Sync lyrics highlight to current time
- */
-function syncLyricsToTime(currentTime) {
-    if (!hasSyncedLyrics || syncedLyrics.length === 0) return;
-
-    // Find current line
-    let newLineIndex = -1;
-    for (let i = syncedLyrics.length - 1; i >= 0; i--) {
-        if (currentTime >= syncedLyrics[i].time) {
-            newLineIndex = i;
-            break;
+    init() {
+        if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
     }
 
-    // Update if changed
-    if (newLineIndex !== currentLineIndex) {
-        currentLineIndex = newLineIndex;
-        highlightCurrentLine(newLineIndex);
+    getAccurateTime() {
+        if (!this.audioContext) return 0;
+        const rawTime = this.audioContext.currentTime - this.startTime + this.pausedTime;
+        return Math.max(0, rawTime + this.driftCorrection);
     }
-}
 
-/**
- * Highlight current lyrics line
- */
-function highlightCurrentLine(index) {
-    const lines = elements.lyricsDisplay.querySelectorAll('.lyrics-line');
+    start(currentVideoTime) {
+        this.startTime = this.audioContext.currentTime - currentVideoTime;
+    }
 
-    lines.forEach((line, i) => {
-        line.classList.remove('active', 'past', 'upcoming', 'next');
+    pause(currentVideoTime) {
+        this.pausedTime = currentVideoTime;
+    }
 
-        if (i < index) {
-            line.classList.add('past');
-        } else if (i === index) {
-            line.classList.add('active');
-        } else if (i === index + 1) {
-            line.classList.add('next');
-        } else {
-            line.classList.add('upcoming');
-        }
-    });
-
-    // Auto-scroll to current line
-    if (autoScrollEnabled && index >= 0) {
-        const activeLine = lines[index];
-        if (activeLine) {
-            activeLine.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-            });
+    correctDrift(videoTime, syncedTime) {
+        const drift = videoTime - syncedTime;
+        if (Math.abs(drift) > 0.2) {
+            this.driftCorrection += drift * 0.3;
         }
     }
-}
 
-/**
- * Reset lyrics highlight
- */
-function resetLyricsHighlight() {
-    currentLineIndex = -1;
-    const lines = elements.lyricsDisplay.querySelectorAll('.lyrics-line');
-    lines.forEach(line => {
-        line.classList.remove('active', 'past', 'upcoming', 'next');
-    });
-}
+    playBeep() {
+        if (!this.audioContext) return;
 
-/**
- * Handle progress bar click for seeking
- */
-function handleProgressSeek(event) {
-    if (!player) return;
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
 
-    const rect = elements.progressBar.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const percent = clickX / rect.width;
-    const duration = player.getDuration();
-    const seekTime = percent * duration;
+        osc.connect(gain);
+        gain.connect(this.audioContext.destination);
 
-    player.seekTo(seekTime, true);
+        osc.frequency.value = 880;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.05);
+
+        osc.start();
+        osc.stop(this.audioContext.currentTime + 0.05);
+    }
 }
 
 // ============================================
-// Utility Functions
+// LYRICS SERVICE
 // ============================================
+const LyricsService = {
+    async fetchWithFallback(artist, title) {
+        const sources = [
+            { name: 'LRCLIB', fn: this.fetchLRCLIB.bind(this) },
+            { name: 'Lyrics.ovh', fn: this.fetchLyricsOvh.bind(this) }
+        ];
 
-/**
- * Extract YouTube video ID from various URL formats
- */
-function extractYouTubeVideoId(url) {
-    const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
-        /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
-    ];
+        for (const source of sources) {
+            try {
+                const result = await source.fn(artist, title);
+                if (result) return { ...result, source: source.name };
+            } catch (e) {
+                console.warn(`${source.name} failed:`, e);
+            }
+        }
 
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match) return match[1];
-    }
-    return null;
-}
+        throw new Error('No lyrics found from any source');
+    },
 
-/**
- * Parse song title to extract artist and song name
- */
-function parseSongTitle(title) {
-    let cleanTitle = title
-        .replace(/–/g, '-')
-        .replace(/—/g, '-')
-        .replace(/\(Official\s*(Music\s*)?Video\s*(Remastered)?\)/gi, '')
-        .replace(/\(Official\s*Audio\)/gi, '')
-        .replace(/\(Official\s*Lyric\s*Video\)/gi, '')
-        .replace(/\(Lyric\s*Video\)/gi, '')
-        .replace(/\(Lyrics\)/gi, '')
-        .replace(/\(with\s+Lyrics\)/gi, '')
-        .replace(/\[Official\s*(Music\s*)?Video\s*(Remastered)?\]/gi, '')
-        .replace(/\[Official\s*Audio\]/gi, '')
-        .replace(/\[Official\s*Lyric\s*Video\]/gi, '')
-        .replace(/\[Lyric\s*Video\]/gi, '')
-        .replace(/\[Lyrics\]/gi, '')
-        .replace(/\(Remastered\s*\d*\)/gi, '')
-        .replace(/\[Remastered\s*\d*\]/gi, '')
-        .replace(/\(Remaster\)/gi, '')
-        .replace(/\[Remaster\]/gi, '')
-        .replace(/\(\d{4}\s*Remaster\)/gi, '')
-        .replace(/\[\d{4}\s*Remaster\]/gi, '')
-        .replace(/\(Audio\)/gi, '')
-        .replace(/\[Audio\]/gi, '')
-        .replace(/\(HD\)/gi, '')
-        .replace(/\[HD\]/gi, '')
-        .replace(/\(HQ\)/gi, '')
-        .replace(/\[HQ\]/gi, '')
-        .replace(/\(4K\)/gi, '')
-        .replace(/\[4K\]/gi, '')
-        .replace(/\(1080p\)/gi, '')
-        .replace(/\[1080p\]/gi, '')
-        .replace(/ft\./gi, 'feat.')
-        .replace(/featuring/gi, 'feat.')
-        .replace(/\s+/g, ' ')
-        .trim();
+    async fetchLRCLIB(artist, title) {
+        const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Not found');
+        const data = await res.json();
 
-    let artist = '';
-    let song = '';
+        if (data.syncedLyrics) {
+            return {
+                synced: true,
+                lines: this.parseLRC(data.syncedLyrics)
+            };
+        }
+        return null;
+    },
 
-    if (cleanTitle.includes(' - ')) {
-        const parts = cleanTitle.split(' - ');
-        artist = parts[0].trim();
-        song = parts.slice(1).join(' - ').trim();
-    } else if (cleanTitle.toLowerCase().includes(' by ')) {
-        const parts = cleanTitle.split(/\s+by\s+/i);
-        song = parts[0].trim();
-        artist = parts[1]?.trim() || '';
-    } else if (cleanTitle.includes(': ')) {
-        const parts = cleanTitle.split(': ');
-        artist = parts[0].trim();
-        song = parts.slice(1).join(': ').trim();
-    } else if (cleanTitle.includes(' | ')) {
-        const parts = cleanTitle.split(' | ');
-        artist = parts[0].trim();
-        song = parts.slice(1).join(' | ').trim();
-    } else {
-        song = cleanTitle;
-    }
+    async fetchLyricsOvh(artist, title) {
+        const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Not found');
+        const data = await res.json();
 
-    song = song
-        .replace(/\s*\(feat\..*?\)/gi, '')
-        .replace(/\s*\[feat\..*?\]/gi, '')
-        .replace(/\s*feat\..*$/gi, '')
-        .trim();
+        return {
+            synced: false,
+            lines: data.lyrics.split('\n')
+                .filter(text => text.trim())
+                .map((text, i) => ({ time: i * 3, text: text.trim() }))
+        };
+    },
 
-    return { artist, song };
-}
-
-/**
- * Parse LRC format timestamps to get synced lyrics
- * Format: [mm:ss.xx] lyrics text
- */
-function parseLrcLyrics(lrcText) {
-    const lines = lrcText.split('\n');
-    const parsed = [];
-
-    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
-
-    for (const line of lines) {
-        // Find all timestamps in the line
-        const timestamps = [];
+    parseLRC(lrcText) {
+        const lines = [];
+        const regex = /\[(\d{1,2}):(\d{2})\.(\d{2,3})\](.*)/g;
         let match;
-        let lastIndex = 0;
 
-        while ((match = timeRegex.exec(line)) !== null) {
+        while ((match = regex.exec(lrcText)) !== null) {
             const mins = parseInt(match[1]);
             const secs = parseInt(match[2]);
             const ms = parseInt(match[3].padEnd(3, '0'));
             const time = mins * 60 + secs + ms / 1000;
-            timestamps.push(time);
-            lastIndex = match.index + match[0].length;
+            const text = match[4].trim();
+
+            if (text) lines.push({ time, text });
         }
 
-        // Get the text after all timestamps
-        const text = line.slice(lastIndex).trim();
-
-        // Add each timestamp with the text
-        for (const time of timestamps) {
-            if (text) {
-                parsed.push({ time, text });
-            }
-        }
-
-        // Reset regex
-        timeRegex.lastIndex = 0;
+        return lines.sort((a, b) => a.time - b.time);
     }
-
-    // Sort by time
-    parsed.sort((a, b) => a.time - b.time);
-
-    return parsed;
-}
-
-/**
- * Show a toast notification
- */
-function showToast(message, duration = 3000) {
-    const existingToast = document.querySelector('.toast');
-    if (existingToast) existingToast.remove();
-
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-}
-
-/**
- * Show/hide sections
- */
-function showSection(section) {
-    elements.loadingSection.classList.remove('show');
-    elements.errorSection.classList.remove('show');
-    elements.karaokeSection.classList.remove('show');
-
-    if (section) {
-        section.classList.add('show');
-    }
-}
-
-/**
- * Show error with message
- */
-function showError(message) {
-    elements.errorMessage.textContent = message;
-    showSection(elements.errorSection);
-}
+};
 
 // ============================================
-// API Functions
+// YOUTUBE SERVICE
 // ============================================
+const YouTubeService = {
+    extractVideoId(url) {
+        const patterns = [
+            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+            /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
+        ];
 
-/**
- * Get YouTube video information
- */
-async function getYouTubeVideoInfo(videoId) {
-    const url = `${API.youtubeOembed}?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+        for (const pattern of patterns) {
+            const match = url.match(pattern);
+            if (match) return match[1];
+        }
+        return null;
+    },
 
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Video not found');
+    async getVideoInfo(videoId) {
+        const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Video not found');
+        return await res.json();
+    },
 
-        const data = await response.json();
-        return {
-            title: data.title,
-            author: data.author_name,
-            thumbnailUrl: data.thumbnail_url
-        };
-    } catch (error) {
-        throw new Error('Could not fetch video information. Please check the URL.');
+    parseTitle(title) {
+        let clean = title
+            .replace(/\(Official.*?\)/gi, '')
+            .replace(/\[Official.*?\]/gi, '')
+            .replace(/\(Lyric.*?\)/gi, '')
+            .replace(/\[Lyric.*?\]/gi, '')
+            .trim();
+
+        if (clean.includes(' - ')) {
+            const [artist, ...songParts] = clean.split(' - ');
+            return { artist: artist.trim(), song: songParts.join(' - ').trim() };
+        }
+
+        return { artist: '', song: clean };
     }
-}
+};
 
-/**
- * Fetch lyrics from LRCLIB API with synced lyrics support
- */
-async function fetchFromLrclib(artist, song) {
-    // Try direct get first
-    const getUrl = `${API.lrclib}/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(song)}`;
+// ============================================
+// APP STATE
+// ============================================
+const App = {
+    player: null,
+    syncEngine: new AudioSyncEngine(),
+    lyrics: null,
+    currentLine: -1,
+    audioEnabled: true,
+    animationFrame: null,
 
-    try {
-        const response = await fetch(getUrl, {
-            headers: { 'User-Agent': 'KaraokeLyrics/1.0' }
+    elements: {
+        searchInput: document.getElementById('search-input'),
+        searchBtn: document.getElementById('search-btn'),
+        loadingBox: document.getElementById('loading-box'),
+        errorBox: document.getElementById('error-box'),
+        errorMessage: document.getElementById('error-message'),
+        retryBtn: document.getElementById('retry-btn'),
+        playerSection: document.getElementById('player-section'),
+        playPauseBtn: document.getElementById('play-pause-btn'),
+        progressBar: document.getElementById('progress-bar'),
+        progressFill: document.getElementById('progress-fill'),
+        currentTime: document.getElementById('current-time'),
+        durationTime: document.getElementById('duration-time'),
+        audioToggleBtn: document.getElementById('audio-toggle-btn'),
+        sourceBadge: document.getElementById('source-badge'),
+        sourceText: document.getElementById('source-text'),
+        lyricsDisplay: document.getElementById('lyrics-display')
+    },
+
+    init() {
+        this.elements.searchBtn.addEventListener('click', () => this.handleSearch());
+        this.elements.searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleSearch();
         });
+        this.elements.retryBtn.addEventListener('click', () => this.showSection(null));
+        this.elements.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.elements.progressBar.addEventListener('click', (e) => this.handleSeek(e));
+        this.elements.audioToggleBtn.addEventListener('click', () => this.toggleAudio());
+    },
 
-        if (response.ok) {
-            const data = await response.json();
+    showSection(section) {
+        this.elements.loadingBox.classList.add('hidden');
+        this.elements.errorBox.classList.add('hidden');
+        this.elements.playerSection.classList.add('hidden');
+        if (section) section.classList.remove('hidden');
+    },
 
-            // Check for synced lyrics first
-            if (data.syncedLyrics && data.syncedLyrics.trim()) {
-                return {
-                    synced: true,
-                    raw: data.syncedLyrics,
-                    parsed: parseLrcLyrics(data.syncedLyrics),
-                    plain: data.plainLyrics || data.syncedLyrics.replace(/\[\d{2}:\d{2}\.\d{2,3}\]/g, '').trim()
-                };
-            }
+    showError(message) {
+        this.elements.errorMessage.textContent = message;
+        this.showSection(this.elements.errorBox);
+    },
 
-            // Fallback to plain lyrics
-            if (data.plainLyrics && data.plainLyrics.trim()) {
-                return {
-                    synced: false,
-                    raw: null,
-                    parsed: [],
-                    plain: data.plainLyrics
-                };
-            }
-        }
-    } catch (e) {
-        console.log('LRCLIB get failed, trying search...');
-    }
+    async handleSearch() {
+        const url = this.elements.searchInput.value.trim();
+        if (!url) return;
 
-    // Try search endpoint
-    const searchUrl = `${API.lrclib}/search?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(song)}`;
-
-    try {
-        const response = await fetch(searchUrl, {
-            headers: { 'User-Agent': 'KaraokeLyrics/1.0' }
-        });
-
-        if (response.ok) {
-            const results = await response.json();
-            if (results && results.length > 0) {
-                const best = results[0];
-
-                if (best.syncedLyrics && best.syncedLyrics.trim()) {
-                    return {
-                        synced: true,
-                        raw: best.syncedLyrics,
-                        parsed: parseLrcLyrics(best.syncedLyrics),
-                        plain: best.plainLyrics || best.syncedLyrics.replace(/\[\d{2}:\d{2}\.\d{2,3}\]/g, '').trim()
-                    };
-                }
-
-                if (best.plainLyrics && best.plainLyrics.trim()) {
-                    return {
-                        synced: false,
-                        raw: null,
-                        parsed: [],
-                        plain: best.plainLyrics
-                    };
-                }
-            }
-        }
-    } catch (e) {
-        console.log('LRCLIB search failed');
-    }
-
-    throw new Error('LRCLIB_NOT_FOUND');
-}
-
-/**
- * Fetch lyrics from Lyrics.ovh (backup, no sync)
- */
-async function fetchFromLyricsOvh(artist, song) {
-    const url = `${API.lyricsOvh}/${encodeURIComponent(artist)}/${encodeURIComponent(song)}`;
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Not found');
-
-        const data = await response.json();
-        if (!data.lyrics || data.lyrics.trim() === '') {
-            throw new Error('Empty lyrics');
+        const videoId = YouTubeService.extractVideoId(url);
+        if (!videoId) {
+            this.showError('Please enter a valid YouTube URL');
+            return;
         }
 
-        return {
-            synced: false,
-            raw: null,
-            parsed: [],
-            plain: data.lyrics
-        };
-    } catch (error) {
-        throw new Error('LYRICS_OVH_NOT_FOUND');
-    }
-}
-
-/**
- * Main lyrics fetcher with multi-API fallback
- */
-async function fetchLyrics(artist, song) {
-    console.log(`🔍 Searching lyrics for: "${song}" by "${artist}"`);
-
-    // Try LRCLIB first (supports synced lyrics)
-    try {
-        const result = await fetchFromLrclib(artist, song);
-        console.log(`✅ Found ${result.synced ? 'synced' : 'plain'} lyrics on LRCLIB`);
-        return result;
-    } catch (e) {
-        console.log('⚠️ LRCLIB failed, trying Lyrics.ovh...');
-    }
-
-    // Fallback to Lyrics.ovh (no sync)
-    try {
-        const result = await fetchFromLyricsOvh(artist, song);
-        console.log('✅ Found plain lyrics on Lyrics.ovh');
-        return result;
-    } catch (e) {
-        console.log('❌ Lyrics.ovh also failed');
-    }
-
-    throw new Error('LYRICS_NOT_FOUND');
-}
-
-/**
- * Try multiple search strategies
- */
-async function findLyrics(artist, song) {
-    const strategies = [
-        { artist, song },
-        { artist, song: song.replace(/\(.*?\)/g, '').trim() },
-        { artist, song: song.replace(/\[.*?\]/g, '').trim() },
-        { artist: artist.replace(/^The\s+/i, ''), song },
-        { artist: artist.split(' ')[0], song },
-        {
-            artist: artist.replace(/\s*feat\..*$/i, '').trim(),
-            song: song.replace(/\s*\(.*?(remix|version|edit).*?\)/gi, '').trim()
-        }
-    ];
-
-    for (const strategy of strategies) {
-        if (!strategy.artist || !strategy.song) continue;
-        if (strategy.song.length < 2) continue;
+        this.showSection(this.elements.loadingBox);
 
         try {
-            console.log(`📝 Trying: "${strategy.song}" by "${strategy.artist}"`);
-            const result = await fetchLyrics(strategy.artist, strategy.song);
-            return result;
-        } catch (error) {
-            continue;
+            const videoInfo = await YouTubeService.getVideoInfo(videoId);
+            const { artist, song } = YouTubeService.parseTitle(videoInfo.title);
+
+            const lyricsData = await LyricsService.fetchWithFallback(
+                artist || videoInfo.author_name,
+                song
+            );
+
+            this.lyrics = lyricsData;
+            this.displayLyrics();
+            this.updateSourceBadge(lyricsData);
+            this.initPlayer(videoId);
+            this.showSection(this.elements.playerSection);
+
+        } catch (err) {
+            this.showError(`Lyrics not found: ${err.message}`);
         }
-    }
+    },
 
-    throw new Error('LYRICS_NOT_FOUND');
-}
-
-// ============================================
-// Display Functions
-// ============================================
-
-/**
- * Display lyrics with karaoke sync
- */
-function displayLyrics(lyricsResult, title, artist, thumbnailUrl) {
-    currentLyrics = lyricsResult.plain;
-    syncedLyrics = lyricsResult.parsed || [];
-    hasSyncedLyrics = lyricsResult.synced && syncedLyrics.length > 0;
-
-    // Set song info
-    elements.songTitle.textContent = title;
-    elements.songArtist.textContent = artist || 'Unknown Artist';
-
-    // Show/hide sync badge
-    if (hasSyncedLyrics) {
-        elements.syncBadge.classList.add('show');
-        elements.lyricsDisplay.classList.remove('static');
-    } else {
-        elements.syncBadge.classList.remove('show');
-        elements.lyricsDisplay.classList.add('static');
-    }
-
-    // Set thumbnail
-    if (thumbnailUrl) {
-        elements.songThumbnail.innerHTML = `<img src="${thumbnailUrl}" alt="Song thumbnail">`;
-    } else {
-        elements.songThumbnail.innerHTML = '🎵';
-    }
-
-    // Format and display lyrics
-    let html = '';
-
-    if (hasSyncedLyrics) {
-        // Use synced lyrics
-        syncedLyrics.forEach((lyric, index) => {
-            html += `<div class="lyrics-line upcoming" data-time="${lyric.time}" data-index="${index}">${escapeHtml(lyric.text)}</div>`;
+    displayLyrics() {
+        let html = '';
+        this.lyrics.lines.forEach((line, i) => {
+            html += `<div class="lyrics-line" data-index="${i}" data-time="${line.time}">${this.escapeHtml(line.text)}</div>`;
         });
-    } else {
-        // Use plain lyrics
-        const lines = currentLyrics.split('\n');
-        lines.forEach(line => {
-            const trimmedLine = line.trim();
-            if (trimmedLine === '') {
-                html += '<div class="lyrics-line empty"></div>';
-            } else {
-                html += `<div class="lyrics-line">${escapeHtml(trimmedLine)}</div>`;
-            }
-        });
-    }
+        this.elements.lyricsDisplay.innerHTML = html;
 
-    elements.lyricsDisplay.innerHTML = html;
-    elements.lyricsDisplay.style.fontSize = `${currentFontSize}rem`;
-
-    // Add click handlers for seeking (if synced)
-    if (hasSyncedLyrics) {
-        elements.lyricsDisplay.querySelectorAll('.lyrics-line').forEach(line => {
-            line.addEventListener('click', () => {
-                const time = parseFloat(line.dataset.time);
-                if (player && !isNaN(time)) {
-                    player.seekTo(time, true);
+        this.elements.lyricsDisplay.querySelectorAll('.lyrics-line').forEach(el => {
+            el.addEventListener('click', () => {
+                const time = parseFloat(el.dataset.time);
+                if (this.player && !isNaN(time)) {
+                    this.player.seekTo(time, true);
+                    this.syncEngine.start(time);
                 }
             });
         });
-    }
+    },
 
-    showSection(elements.karaokeSection);
-}
+    updateSourceBadge(lyricsData) {
+        this.elements.sourceText.textContent = `${lyricsData.synced ? 'Synced' : 'Unsynced'} lyrics • Source: ${lyricsData.source}`;
+        this.elements.sourceBadge.classList.remove('hidden');
+    },
 
-/**
- * Escape HTML
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
 
-// ============================================
-// Main Analysis Function
-// ============================================
-
-async function analyzeYouTubeUrl(url) {
-    const videoId = extractYouTubeVideoId(url);
-    if (!videoId) {
-        showError('Please enter a valid YouTube URL.');
-        return;
-    }
-
-    showSection(elements.loadingSection);
-    stopProgressTracking();
-    resetLyricsHighlight();
-
-    try {
-        // Get video info
-        const videoInfo = await getYouTubeVideoInfo(videoId);
-        const { artist, song } = parseSongTitle(videoInfo.title);
-
-        if (!song) {
-            throw new Error('Could not identify song title from video.');
+    initPlayer(videoId) {
+        if (this.player) {
+            this.player.destroy();
         }
 
-        // Pre-fill manual search
-        elements.artistInput.value = artist;
-        elements.songInput.value = song;
+        this.player = new YT.Player('youtube-player', {
+            videoId,
+            playerVars: { autoplay: 1, controls: 0, modestbranding: 1, playsinline: 1 },
+            events: {
+                onReady: (e) => {
+                    this.syncEngine.init();
+                    this.syncEngine.start(0);
+                    this.elements.durationTime.textContent = this.formatTime(e.target.getDuration());
+                    this.startSyncLoop();
+                },
+                onStateChange: (e) => {
+                    if (e.data === YT.PlayerState.PLAYING) {
+                        this.elements.playPauseBtn.textContent = '⏸️';
+                        this.syncEngine.start(e.target.getCurrentTime());
+                        this.startSyncLoop();
+                    } else if (e.data === YT.PlayerState.PAUSED) {
+                        this.elements.playPauseBtn.textContent = '▶️';
+                        this.syncEngine.pause(e.target.getCurrentTime());
+                        this.stopSyncLoop();
+                    }
+                }
+            }
+        });
+    },
 
-        // Fetch lyrics
-        const searchArtist = artist || videoInfo.author;
-        const lyricsResult = await findLyrics(searchArtist, song);
+    startSyncLoop() {
+        this.stopSyncLoop();
 
-        // Display lyrics
-        displayLyrics(lyricsResult, song, searchArtist, videoInfo.thumbnailUrl);
+        const syncFrame = () => {
+            if (!this.player) return;
 
-        // Initialize YouTube player
-        initYouTubePlayer(videoId);
+            const accurateTime = this.syncEngine.getAccurateTime();
+            const videoTime = this.player.getCurrentTime();
+            const duration = this.player.getDuration();
 
-    } catch (error) {
-        console.error('Analysis error:', error);
+            this.syncEngine.correctDrift(videoTime, accurateTime);
 
-        if (error.message === 'LYRICS_NOT_FOUND') {
-            showError('Lyrics not found. Try using the manual search with the exact artist and song name.');
+            const progress = (accurateTime / duration) * 100;
+            this.elements.progressFill.style.width = `${progress}%`;
+            this.elements.currentTime.textContent = this.formatTime(accurateTime);
+
+            this.syncLyrics(accurateTime);
+
+            this.animationFrame = requestAnimationFrame(syncFrame);
+        };
+
+        this.animationFrame = requestAnimationFrame(syncFrame);
+    },
+
+    stopSyncLoop() {
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+        }
+    },
+
+    syncLyrics(currentTime) {
+        if (!this.lyrics) return;
+
+        let newLine = -1;
+        for (let i = this.lyrics.lines.length - 1; i >= 0; i--) {
+            if (currentTime >= this.lyrics.lines[i].time - 0.1) {
+                newLine = i;
+                break;
+            }
+        }
+
+        if (newLine !== this.currentLine) {
+            this.currentLine = newLine;
+            this.highlightLine(newLine);
+
+            if (this.audioEnabled && newLine >= 0) {
+                this.syncEngine.playBeep();
+            }
+        }
+    },
+
+    highlightLine(index) {
+        const lines = this.elements.lyricsDisplay.querySelectorAll('.lyrics-line');
+
+        lines.forEach((line, i) => {
+            line.classList.remove('active', 'past');
+            if (i < index) line.classList.add('past');
+            else if (i === index) line.classList.add('active');
+        });
+
+        if (index >= 0 && lines[index]) {
+            lines[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    },
+
+    togglePlayPause() {
+        if (!this.player) return;
+
+        const state = this.player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+            this.player.pauseVideo();
         } else {
-            showError(error.message || 'An unexpected error occurred. Please try again.');
+            this.player.playVideo();
         }
+    },
+
+    handleSeek(e) {
+        if (!this.player) return;
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const percent = (e.clientX - rect.left) / rect.width;
+        const seekTime = percent * this.player.getDuration();
+
+        this.player.seekTo(seekTime, true);
+        this.syncEngine.start(seekTime);
+    },
+
+    toggleAudio() {
+        this.audioEnabled = !this.audioEnabled;
+        this.elements.audioToggleBtn.textContent = this.audioEnabled ? '🔊' : '🔇';
+    },
+
+    formatTime(secs) {
+        const m = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
     }
-}
+};
 
-async function manualSearch() {
-    const artist = elements.artistInput.value.trim();
-    const song = elements.songInput.value.trim();
+// Initialize app
+window.onYouTubeIframeAPIReady = () => {
+    console.log('YouTube API Ready');
+};
 
-    if (!artist || !song) {
-        showToast('Please enter both artist and song name', 3000);
-        return;
-    }
-
-    showSection(elements.loadingSection);
-
-    try {
-        const lyricsResult = await fetchLyrics(artist, song);
-        displayLyrics(lyricsResult, song, artist, null);
-
-        // If we have a video playing, just update lyrics
-        if (!player) {
-            showSection(elements.karaokeSection);
-        }
-    } catch (error) {
-        showError('Lyrics not found. Please check the spelling and try again.');
-    }
-}
-
-// ============================================
-// Event Listeners
-// ============================================
-
-// Analyze/Play button
-elements.analyzeBtn.addEventListener('click', () => {
-    const url = elements.youtubeUrl.value.trim();
-    if (url) {
-        analyzeYouTubeUrl(url);
-    } else {
-        showToast('Please enter a YouTube URL', 3000);
-    }
-});
-
-// Enter key on URL input
-elements.youtubeUrl.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        elements.analyzeBtn.click();
-    }
-});
-
-// Manual search
-elements.manualSearchBtn.addEventListener('click', manualSearch);
-
-elements.songInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') manualSearch();
-});
-
-elements.artistInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') elements.songInput.focus();
-});
-
-// Retry button
-elements.retryBtn.addEventListener('click', () => {
-    showSection(null);
-    elements.youtubeUrl.focus();
-});
-
-// Play/Pause
-elements.playPauseBtn.addEventListener('click', togglePlayPause);
-
-// Progress bar seek
-elements.progressBar.addEventListener('click', handleProgressSeek);
-
-// Font size controls
-elements.fontIncrease.addEventListener('click', () => {
-    if (currentFontSize < 2.5) {
-        currentFontSize += 0.1;
-        elements.lyricsDisplay.style.fontSize = `${currentFontSize}rem`;
-    }
-});
-
-elements.fontDecrease.addEventListener('click', () => {
-    if (currentFontSize > 0.8) {
-        currentFontSize -= 0.1;
-        elements.lyricsDisplay.style.fontSize = `${currentFontSize}rem`;
-    }
-});
-
-// Copy lyrics
-elements.copyLyrics.addEventListener('click', async () => {
-    if (currentLyrics) {
-        try {
-            await navigator.clipboard.writeText(currentLyrics);
-            showToast('Lyrics copied to clipboard! 📋', 2000);
-        } catch (error) {
-            showToast('Could not copy lyrics', 2000);
-        }
-    }
-});
-
-// Auto-scroll toggle
-elements.autoScrollBtn.addEventListener('click', () => {
-    autoScrollEnabled = !autoScrollEnabled;
-    elements.autoScrollBtn.classList.toggle('active', autoScrollEnabled);
-    showToast(autoScrollEnabled ? 'Auto-scroll enabled' : 'Auto-scroll disabled', 2000);
-});
-
-// URL paste detection
-elements.youtubeUrl.addEventListener('paste', (e) => {
-    setTimeout(() => {
-        const url = elements.youtubeUrl.value.trim();
-        if (extractYouTubeVideoId(url)) {
-            analyzeYouTubeUrl(url);
-        }
-    }, 100);
-});
-
-// ============================================
-// Initialize
-// ============================================
-console.log('🎤 Karaoke Lyrics initialized!');
-console.log('ℹ️ Paste a YouTube URL to start the karaoke experience!');
+App.init();
+console.log('🎤 KaraokeSync Pro Ready!');

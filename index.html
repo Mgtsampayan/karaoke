@@ -4,139 +4,428 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎤 Karaoke Lyrics - YouTube Song Player</title>
-    <meta name="description" content="Play YouTube music videos with synchronized karaoke-style lyrics">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <title>🎤 KaraokeSync Pro - Audio-Accurate Karaoke</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --purple: #9333ea;
+            --purple-dark: #7c3aed;
+            --purple-light: #a855f7;
+            --slate-950: #020617;
+            --slate-900: #0f172a;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-400: #94a3b8;
+            --slate-300: #cbd5e1;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, var(--slate-950), var(--purple-dark), var(--slate-950));
+            color: white;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 2rem;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .highlight {
+            color: var(--purple-light);
+        }
+
+        .subtitle {
+            color: var(--slate-400);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        /* Search Section */
+        .search-section {
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #search-input {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        #search-input:focus {
+            border-color: var(--purple);
+            box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
+        }
+
+        #search-btn {
+            padding: 1rem 2rem;
+            background: var(--purple);
+            border: none;
+            border-radius: 1rem;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #search-btn:hover {
+            background: var(--purple-dark);
+            transform: translateY(-2px);
+        }
+
+        #search-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Player Grid */
+        .player-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .player-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Video Container */
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            background: black;
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        #youtube-player {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Controls */
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 1rem;
+        }
+
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .control-btn {
+            width: 48px;
+            height: 48px;
+            background: var(--purple);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(147, 51, 234, 0.5);
+        }
+
+        .progress-container {
+            flex: 1;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+            overflow: hidden;
+            cursor: pointer;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--purple), var(--purple-light));
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .time-display {
+            font-size: 0.85rem;
+            color: var(--slate-400);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            color: #86efac;
+            margin-top: 0.75rem;
+        }
+
+        /* Lyrics Container */
+        .lyrics-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .lyrics-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .lyrics-header h3 {
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .lyrics-display {
+            padding: 1.5rem;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .lyrics-line {
+            padding: 1rem 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--slate-400);
+            font-size: 1.2rem;
+            line-height: 1.8;
+            text-align: center;
+        }
+
+        .lyrics-line:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--slate-300);
+        }
+
+        .lyrics-line.active {
+            background: linear-gradient(135deg, rgba(147, 51, 234, 0.4), rgba(168, 85, 247, 0.4));
+            border: 1px solid rgba(147, 51, 234, 0.5);
+            color: white;
+            font-weight: 600;
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(147, 51, 234, 0.3);
+        }
+
+        .lyrics-line.past {
+            color: var(--slate-700);
+            opacity: 0.5;
+        }
+
+        /* Loading/Error States */
+        .message-box {
+            text-align: center;
+            padding: 3rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            margin: 2rem auto;
+            max-width: 500px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(147, 51, 234, 0.3);
+            border-top-color: var(--purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Scrollbar */
+        .lyrics-display::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .lyrics-display::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .lyrics-display::-webkit-scrollbar-thumb {
+            background: rgba(147, 51, 234, 0.5);
+            border-radius: 4px;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="background-effects">
-        <div class="gradient-orb orb-1"></div>
-        <div class="gradient-orb orb-2"></div>
-        <div class="gradient-orb orb-3"></div>
-    </div>
-
     <div class="container">
-        <!-- Header Section -->
-        <header class="header">
-            <div class="logo">
-                <span class="logo-icon">�</span>
-                <h1>Karaoke<span class="highlight">Lyrics</span></h1>
+        <header>
+            <div class="header-content">
+                <span class="logo">🎤</span>
+                <div>
+                    <h1>Karaoke<span class="highlight">Sync</span> Pro</h1>
+                    <p class="subtitle">Audio-accurate sync • Multi-source lyrics • Human-grade UX</p>
+                </div>
             </div>
-            <p class="tagline">Play YouTube songs with synchronized lyrics - Real Karaoke Experience! 🎵</p>
         </header>
 
-        <!-- Input Section -->
-        <section class="input-section">
-            <div class="input-wrapper">
-                <div class="input-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z">
-                        </path>
-                        <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
-                    </svg>
-                </div>
-                <input type="text" id="youtube-url" class="url-input"
-                    placeholder="Paste YouTube URL here... (e.g., https://youtube.com/watch?v=...)" autocomplete="off">
-                <button id="analyze-btn" class="analyze-btn">
-                    <span class="btn-text">Play</span>
-                    <span class="btn-icon">▶️</span>
-                </button>
+        <!-- Search Section -->
+        <div class="search-section">
+            <div class="search-wrapper">
+                <input type="text" id="search-input" placeholder="Paste YouTube URL here..." autocomplete="off">
+                <button id="search-btn">Search</button>
             </div>
-
-            <!-- Manual Override (if YouTube title doesn't work) -->
-            <div class="manual-search" id="manual-search">
-                <p class="manual-hint">Or search lyrics manually:</p>
-                <div class="manual-inputs">
-                    <input type="text" id="artist-input" class="manual-input" placeholder="Artist name">
-                    <input type="text" id="song-input" class="manual-input" placeholder="Song title">
-                    <button id="manual-search-btn" class="manual-btn">Find Lyrics</button>
-                </div>
-            </div>
-        </section>
+        </div>
 
         <!-- Loading State -->
-        <section class="loading-section" id="loading-section">
-            <div class="loading-spinner">
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-            </div>
-            <p class="loading-text">Loading karaoke experience...</p>
-        </section>
+        <div id="loading-box" class="message-box hidden">
+            <div class="spinner"></div>
+            <p>Loading karaoke experience...</p>
+        </div>
 
         <!-- Error State -->
-        <section class="error-section" id="error-section">
+        <div id="error-box" class="message-box hidden">
             <div class="error-icon">😔</div>
-            <h3 class="error-title">Oops! Something went wrong</h3>
-            <p class="error-message" id="error-message"></p>
-            <button class="retry-btn" id="retry-btn">Try Again</button>
-        </section>
+            <h3>Oops! Something went wrong</h3>
+            <p id="error-message" style="color: var(--slate-400); margin: 1rem 0;"></p>
+            <button id="retry-btn"
+                style="padding: 0.75rem 2rem; background: var(--purple); border: none; border-radius: 0.75rem; color: white; cursor: pointer; margin-top: 1rem;">Try
+                Again</button>
+        </div>
 
-        <!-- Karaoke Section (Video + Lyrics) -->
-        <section class="karaoke-section" id="karaoke-section">
-            <!-- Video Player -->
-            <div class="video-container">
+        <!-- Player Section -->
+        <div id="player-section" class="player-grid hidden">
+            <!-- Video Section -->
+            <div class="video-section">
                 <div class="video-wrapper">
                     <div id="youtube-player"></div>
                 </div>
-                <div class="player-controls">
-                    <button class="control-btn" id="play-pause-btn" title="Play/Pause">
-                        <span id="play-icon">▶️</span>
-                    </button>
-                    <div class="progress-container">
-                        <div class="progress-bar" id="progress-bar">
-                            <div class="progress-fill" id="progress-fill"></div>
+
+                <div class="controls">
+                    <div class="controls-row">
+                        <button id="play-pause-btn" class="control-btn">▶️</button>
+
+                        <div class="progress-container">
+                            <div class="progress-bar" id="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                            <div class="time-display">
+                                <span id="current-time">0:00</span>
+                                <span id="duration-time">0:00</span>
+                            </div>
                         </div>
-                        <span class="time-display" id="time-display">0:00 / 0:00</span>
+
+                        <button id="audio-toggle-btn" class="control-btn">🔊</button>
                     </div>
-                    <button class="control-btn" id="sync-mode-btn" title="Toggle Sync Mode">
-                        🎤
-                    </button>
+
+                    <div id="source-badge" class="source-badge hidden">
+                        <span>✓</span>
+                        <span id="source-text">Synced lyrics • Source: LRCLIB</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Song Info -->
-            <div class="song-info">
-                <div class="song-thumbnail" id="song-thumbnail"></div>
-                <div class="song-details">
-                    <h2 class="song-title" id="song-title"></h2>
-                    <p class="song-artist" id="song-artist"></p>
-                    <span class="sync-badge" id="sync-badge">⏱️ Synced Lyrics</span>
-                </div>
-            </div>
-
-            <!-- Lyrics Display -->
-            <div class="lyrics-container karaoke-mode">
+            <!-- Lyrics Section -->
+            <div class="lyrics-container">
                 <div class="lyrics-header">
-                    <h3>🎤 Karaoke Lyrics</h3>
-                    <div class="lyrics-actions">
-                        <button class="action-btn" id="font-increase" title="Increase font size">A+</button>
-                        <button class="action-btn" id="font-decrease" title="Decrease font size">A-</button>
-                        <button class="action-btn" id="copy-lyrics" title="Copy lyrics">📋</button>
-                        <button class="action-btn active" id="auto-scroll-btn" title="Auto-scroll">📜</button>
-                    </div>
+                    <h3><span>🎤</span> Lyrics</h3>
                 </div>
-                <div class="lyrics-display karaoke" id="lyrics-display">
-                    <!-- Lyrics will be inserted here with sync data -->
-                </div>
+                <div class="lyrics-display" id="lyrics-display"></div>
             </div>
-        </section>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <p>Made with ❤️ for music lovers | Powered by LRCLIB & YouTube</p>
-        </footer>
+        </div>
     </div>
 
-    <!-- YouTube IFrame API -->
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="app.js"></script>
 </body>
